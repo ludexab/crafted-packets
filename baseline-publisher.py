@@ -29,3 +29,13 @@ def publish_sensor_data():
 
 if __name__ == "__main__":
     publish_sensor_data()
+
+
+selected_columns = [
+    'Flow Duration', 'Total Fwd Packets', 'Total Backward Packets',
+    'Flow Bytes/s', 'Flow Packets/s', 'Fwd Packet Length Mean',
+    'Bwd Packet Length Mean', 'Packet Length Mean', 'Packet Length Std',
+    'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Mean', 'Bwd IAT Mean',
+    'FIN Flag Count', 'SYN Flag Count', 'RST Flag Count',
+    'PSH Flag Count', 'ACK Flag Count', 'Label'
+]
