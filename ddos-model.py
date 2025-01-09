@@ -3,7 +3,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from imblearn.over_sampling import SMOTE
 from river import stream
 from river.forest import ARFClassifier
-from river.metrics import Accuracy, Precision, Recall
+from river.metrics import Accuracy, Precision, Recall, F1
 from kafka import KafkaConsumer
 import pickle
 import json
@@ -19,6 +19,10 @@ def preprocess_data(filepath, selected_columns):
 
     # Select relevant columns (Feature extraction)
     data = data[selected_columns]
+
+    # Split into 70% for offline and 30% for online
+    split_index = int(0.7 * len(data))
+    data = data[:split_index]
 
     # Encode target labels
     label_encoder = LabelEncoder()
@@ -82,6 +86,60 @@ def train_offline_rf(filepath, selected_columns, model_path):
 
     print(f"Model saved to {model_path}")
 
+# Step 3. Validate the trained model with validation dataset
+def validate_holdout(filepath, selected_columns, model_path):
+    # Load the dataset
+    data = pd.read_csv(filepath)
+
+    # Select relevant columns (Feature extraction)
+    data = data[selected_columns]
+
+    # Split into train and test sets (70% for training and 30% for testing)
+    split_index = int(0.7 * len(data))
+    test_data = data[split_index:]
+
+    # Load the pre-trained model and label encoder
+    with open(model_path, 'rb') as f:
+        saved_objects = pickle.load(f)
+        model = saved_objects['model']
+        label_encoder = saved_objects['label_encoder']
+
+    print("Loaded pre-trained model for validation.")
+
+    # Preprocess test data
+    X_test = test_data.drop('Class', axis=1)
+    y_test = test_data['Class']
+
+    # Encode labels
+    y_test_encoded = label_encoder.transform(y_test)
+
+    # Standardize features (using the same scaling approach as offline training)
+    scaler = StandardScaler()
+    X_test_scaled = scaler.fit_transform(X_test)
+
+    # Convert to river stream format
+    test_stream = stream.iter_pandas(pd.DataFrame(X_test_scaled, columns=X_test.columns), pd.Series(y_test_encoded))
+
+    # Metrics
+    metrics = {
+        'accuracy': Accuracy(),
+        'precision': Precision(),
+        'recall': Recall(),
+        'f1': F1()
+    }
+
+    # Evaluate the model on the test data
+    print("Starting Holdout Validation...")
+    for x, y in test_stream:
+        y_pred = model.predict_one(x)
+
+        # Update metrics
+        for name, metric in metrics.items():
+            metric.update(y, y_pred)
+
+    # Print final metrics
+    print("Holdout Validation Metrics:", {name: metric.get() for name, metric in metrics.items()})
+
 # Full Pipeline Execution (Example)
 if __name__ == "__main__":
     # Define selected columns
@@ -102,3 +160,6 @@ if __name__ == "__main__":
 
     # Step 1: Offline Training and Saving
     train_offline_rf(filepath=dataset_path, selected_columns=selected_columns, model_path=model_path)
+
+    # Step 3. Validation of model
+    validate_holdout(filepath=dataset_path, selected_columns=selected_columns, model_path=model_path)
