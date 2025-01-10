@@ -29,6 +29,7 @@ def load_data(file_path):
 
     # Select relevant columns (Feature extraction)
     data = data[selected_columns]
+    
     return data
 
 def preprocess_data(data):
@@ -38,6 +39,9 @@ def preprocess_data(data):
     # Standardize features
     scaler = StandardScaler()
     features = scaler.fit_transform(features)
+
+    # Convert to DataFrame to maintain column names (for the ARF model)
+    features = pd.DataFrame(features, columns=data.columns[:-1])
 
     return features, labels
 
@@ -50,15 +54,20 @@ def preprocess_holdout_data(holdout_data):
     scaler = StandardScaler()
     features = scaler.fit_transform(features)
 
+    # Convert to DataFrame to maintain column names
+    features = pd.DataFrame(features, columns=holdout_data.columns[:-1])
+
     return features, labels
 
 # Train model
 def train_offline_model(features, labels):
-    # Use an AdaptiveRandomForestClassifier for training
     model = ARFClassifier()
     metric = Accuracy()
 
-    for x, y in zip(features, labels):
+    # Loop through each row and convert to a dictionary
+    for i in range(len(features)):
+        x = features.iloc[i].to_dict()  # Convert row to a dictionary
+        y = labels.iloc[i]  # Label for that row
         y_pred = model.predict_one(x)
         metric.update(y, y_pred)
         model.learn_one(x, y)
@@ -66,7 +75,7 @@ def train_offline_model(features, labels):
     return model, metric
 
 def evaluate_model(model, features, labels):
-    predictions = [model.predict_one(x) for x in features]
+    predictions = [model.predict_one(x.to_dict()) for _, x in features.iterrows()]
     accuracy = accuracy_score(labels, predictions)
     precision = precision_score(labels, predictions, average='weighted', zero_division=0)
     recall = recall_score(labels, predictions, average='weighted', zero_division=0)
