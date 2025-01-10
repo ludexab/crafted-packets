@@ -40,12 +40,12 @@ def preprocess_data(filepath, selected_columns):
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_resampled)
 
-    return pd.DataFrame(X_scaled, columns=X.columns), pd.Series(y_resampled), label_encoder
+    return pd.DataFrame(X_scaled, columns=X.columns), pd.Series(y_resampled), label_encoder, scaler
 
 # Step 2: Offline Training and Model Saving
 def train_offline_rf(filepath, selected_columns, model_path):
     # Preprocess the data
-    X, y, label_encoder = preprocess_data(filepath, selected_columns)
+    X, y, label_encoder, scaler = preprocess_data(filepath, selected_columns)
 
     # Convert to river stream format
     data_stream = stream.iter_pandas(X, y)
@@ -80,11 +80,65 @@ def train_offline_rf(filepath, selected_columns, model_path):
     # Print final metrics
     print("Offline Training Metrics:", {name: metric.get() for name, metric in metrics.items()})
 
-    # Save the model and label encoder to disk
+    # Save the model, label encoder, and scaler to disk
     with open(model_path, 'wb') as f:
-        pickle.dump({'model': model, 'label_encoder': label_encoder}, f)
+        pickle.dump({'model': model, 'label_encoder': label_encoder, 'scaler': scaler}, f)
 
     print(f"Model saved to {model_path}")
+
+# ==============================
+# PHASE 2: REAL-TIME INTEGRATION
+# ==============================
+
+# Step 3: Online Training with Kafka and Loaded Model
+def train_online_rf_with_kafka(topic, selected_columns, model_path):
+    # Load the pre-trained model, label encoder, and scaler
+    with open(model_path, 'rb') as f:
+        saved_objects = pickle.load(f)
+        model = saved_objects['model']
+        label_encoder = saved_objects['label_encoder']
+
+    print("Loaded pre-trained model.")
+
+    # Initialize Kafka Consumer
+    consumer = KafkaConsumer(
+        topic,
+        bootstrap_servers='localhost:9092',
+        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+    )
+
+    # Metrics
+    metrics = {
+        'accuracy': Accuracy(),
+        'precision': Precision(),
+        'recall': Recall()
+    }
+
+    print("Starting Online Training...")
+
+    # Online Training Loop
+    for message in consumer:
+        # Deserialize Kafka message
+        record = message.value
+
+        # Extract features and target from record
+        x = {col: record[col] for col in selected_columns if col != 'Class'}
+        y = label_encoder.transform([record['Class']])[0]
+
+        # Train the model incrementally
+        y_pred = model.predict_one(x)
+        model.learn_one(x, y)
+
+        # Update metrics
+        for name, metric in metrics.items():
+            metric.update(y, y_pred)
+
+        # Print metrics periodically
+        print({name: metric.get() for name, metric in metrics.items()})
+
+# ================
+# MODEL VALIDATION
+# ================
 
 # Function to preprocess the holdout data
 def preprocess_holdout(filepath, selected_columns, scaler, label_encoder):
@@ -112,7 +166,7 @@ def preprocess_holdout(filepath, selected_columns, scaler, label_encoder):
 
 # Function to validate the model using a holdout dataset
 def validate_with_holdout(model_path, holdout_filepath, selected_columns):
-    # Load the pre-trained model and label encoder
+    # Load the pre-trained model, label encoder, and scaler
     with open(model_path, 'rb') as f:
         saved_objects = pickle.load(f)
         model = saved_objects['model']
@@ -168,6 +222,9 @@ if __name__ == "__main__":
 
     # Step 1: Offline Training and Saving
     train_offline_rf(filepath=dataset_path, selected_columns=selected_columns, model_path=model_path)
+
+    # Step 2: Online Training with Kafka
+    train_online_rf_with_kafka(topic="ddos-detection", selected_columns=selected_columns, model_path=model_path)
 
     # Validate model with holdout data
     validate_with_holdout(model_path=model_path, holdout_filepath=dataset_path, selected_columns=selected_columns)
