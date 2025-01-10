@@ -4,6 +4,19 @@ from sklearn.model_selection import train_test_split
 # Load the dataset
 data = pd.read_csv("datasets/cicddos2019_dataset.csv")
 
+selected_features = [
+    "Flow Duration", "Fwd Packets Length Total", "Bwd Packets Length Total", "Fwd Packet Length Max", 
+    "Fwd Packet Length Min", "Fwd Packet Length Mean", "Fwd Packet Length Std", "Flow Bytes/s", 
+    "Flow Packets/s", "Flow IAT Mean", "Flow IAT Std", "Flow IAT Max", "Flow IAT Min", 
+    "Fwd IAT Total", "Fwd IAT Mean", "Fwd IAT Std", "Fwd IAT Max", "Fwd Header Length", 
+    "Bwd Header Length", "Fwd Packets/s", "Bwd Packets/s", "Packet Length Min", "Packet Length Max", 
+    "Packet Length Mean", "Packet Length Std", "Avg Packet Size", "Avg Fwd Segment Size", 
+    "Subflow Fwd Packets", "Subflow Fwd Bytes", "Init Fwd Win Bytes", "Init Bwd Win Bytes", 
+    "Fwd Act Data Packets", "Fwd Seg Size Min", "Class"
+]
+
+data = data[selected_features]
+
 # Split into Offline Training (60%) and Temp (40%)
 offline_train, temp = train_test_split(data, test_size=0.4, random_state=42)
 
