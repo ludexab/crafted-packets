@@ -16,6 +16,19 @@ os.makedirs("models", exist_ok=True)
 # Load and preprocess data
 def load_data(file_path):
     data = pd.read_csv(file_path)
+
+    # Define selected columns
+    selected_columns = [
+        'Flow Duration', 'Total Fwd Packets', 'Total Backward Packets',
+        'Flow Bytes/s', 'Flow Packets/s', 'Fwd Packet Length Mean',
+        'Bwd Packet Length Mean', 'Packet Length Mean', 'Packet Length Std',
+        'Flow IAT Mean', 'Flow IAT Std', 'Fwd IAT Mean', 'Bwd IAT Mean',
+        'FIN Flag Count', 'SYN Flag Count', 'RST Flag Count',
+        'PSH Flag Count', 'ACK Flag Count', 'Class'
+    ]
+
+    # Select relevant columns (Feature extraction)
+    data = data[selected_columns]
     return data
 
 def preprocess_data(data):
