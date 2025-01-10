@@ -97,6 +97,7 @@ def train_online_rf_with_kafka(topic, selected_columns, model_path):
         saved_objects = pickle.load(f)
         model = saved_objects['model']
         label_encoder = saved_objects['label_encoder']
+        scaler = saved_objects['scaler']
 
     print("Loaded pre-trained model.")
 
@@ -125,9 +126,12 @@ def train_online_rf_with_kafka(topic, selected_columns, model_path):
         x = {col: record[col] for col in selected_columns if col != 'Class'}
         y = label_encoder.transform([record['Class']])[0]
 
+        # Normalize features using the pre-fitted scaler
+        x_normalized = scaler.transform(pd.DataFrame([x]))[0]
+
         # Train the model incrementally
-        y_pred = model.predict_one(x)
-        model.learn_one(x, y)
+        y_pred = model.predict_one(x_normalized)
+        model.learn_one(x_normalized, y)
 
         # Update metrics
         for name, metric in metrics.items():
@@ -136,9 +140,9 @@ def train_online_rf_with_kafka(topic, selected_columns, model_path):
         # Print metrics periodically
         print({name: metric.get() for name, metric in metrics.items()})
 
-# ================
-# MODEL VALIDATION
-# ================
+# ==============================
+# PHASE 3: MODEL VALIDATION
+# ==============================
 
 # Function to preprocess the holdout data
 def preprocess_holdout(filepath, selected_columns, scaler, label_encoder):
@@ -193,7 +197,10 @@ def validate_with_holdout(model_path, holdout_filepath, selected_columns):
 
     # Perform validation
     for x, y in holdout_stream:
-        y_pred = model.predict_one(x)
+        # Normalize features
+        x_normalized = scaler.transform(pd.DataFrame([x]))[0]
+
+        y_pred = model.predict_one(x_normalized)
 
         # Update metrics
         for name, metric in metrics.items():
@@ -228,3 +235,4 @@ if __name__ == "__main__":
 
     # Validate model with holdout data
     validate_with_holdout(model_path=model_path, holdout_filepath=dataset_path, selected_columns=selected_columns)
+
